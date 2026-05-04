@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
-import { productHref, searchKnownProducts, TRENDING_PRODUCTS } from "@/lib/openby-product";
+import { productHref, TRENDING_PRODUCTS } from "@/lib/openby-product";
+import { searchProducts } from "@/lib/openby-services";
 import { BrandMark } from "@/app/components/brand";
 import { ProductImage } from "@/app/components/product-image";
 
@@ -9,7 +10,7 @@ type SearchPageProps = {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q = "" } = await searchParams;
-  const results = searchKnownProducts(q);
+  const results = q.trim() ? await searchProducts(q) : TRENDING_PRODUCTS;
   const fallback = results.length > 0 ? results : TRENDING_PRODUCTS;
 
   return (

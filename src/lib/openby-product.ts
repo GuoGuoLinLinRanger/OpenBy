@@ -1,5 +1,9 @@
 export type ProductAnalyzeInput = {
   productName: string;
+  category?: string;
+  imageUrl?: string;
+  retailerUrl?: string;
+  currentPrice?: number;
 };
 
 export type ProductSignal = {
@@ -49,6 +53,7 @@ export type ProductAnalysis = {
   imageUrl: string;
   fallbackImageUrl: string;
   retailerUrl: string;
+  dataSource: "indexed" | "database" | "live-search" | "live-price";
   currentPrice: number;
   targetBuyPrice: number;
   predictedPrice: number;
@@ -66,7 +71,7 @@ export type ProductAnalysis = {
   similarProducts: SimilarProduct[];
 };
 
-type ProductProfile = {
+export type ProductProfile = {
   aliases: string[];
   productName: string;
   category: string;
@@ -369,6 +374,10 @@ function productId(productName: string) {
   return productSlug(productName);
 }
 
+export function knownProfiles() {
+  return PROFILES;
+}
+
 export function findKnownProduct(productName: string) {
   const search = productName.toLowerCase().trim().replace(/-/g, " ");
   return PROFILES.find((profile) => {
@@ -573,21 +582,21 @@ export function analyzeProduct(input: ProductAnalyzeInput): ProductAnalysis {
   const requestedName = input.productName.trim();
   if (requestedName.length < 2) throw new Error("Enter a product name to analyze.");
 
-  const profile = findKnownProduct(requestedName);
-  if (!profile) {
-    throw new Error("Product is not in the indexed database yet. Try a related keyword.");
-  }
+  const profile = findKnownProduct(requestedName) ?? buildGeneratedProfile(requestedName);
   const productName = profile.productName;
   const seed = hash(productName);
-  const priceHistory = profile.prices.map((price, index) => ({ date: DATES[index]!, price }));
-  const currentPrice = profile.prices.at(-1)!;
-  const avgPrice = profile.prices.reduce((sum, price) => sum + price, 0) / profile.prices.length;
-  const minPrice = Math.min(...profile.prices);
-  const maxPrice = Math.max(...profile.prices);
+  const baseCurrentPrice = profile.prices.at(-1)!;
+  const currentPrice = input.currentPrice && input.currentPrice > 0 ? Math.round(input.currentPrice) : baseCurrentPrice;
+  const priceScale = currentPrice / Math.max(1, baseCurrentPrice);
+  const prices = profile.prices.map((price, index) => (index === profile.prices.length - 1 ? currentPrice : Math.round(price * priceScale)));
+  const priceHistory = prices.map((price, index) => ({ date: DATES[index]!, price }));
+  const avgPrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
   const pricePosition = clamp(100 - ((currentPrice - minPrice) / Math.max(1, maxPrice - minPrice)) * 100);
   const movingAverage = clamp(55 + ((avgPrice - currentPrice) / avgPrice) * 320);
   const volatility = clamp(100 - ((maxPrice - minPrice) / avgPrice) * 260);
-  const forecast = forecastPriceWithMonteCarlo(profile.prices, seed);
+  const forecast = forecastPriceWithMonteCarlo(prices, seed);
   const predictedPrice = forecast.predictedPrice;
   const trainedModel = forecast.forecastScore;
   const monteCarloBuyNowSafety = forecast.buyNowSafety;
@@ -610,7 +619,7 @@ export function analyzeProduct(input: ProductAnalyzeInput): ProductAnalysis {
             ? "Not good: this does not point to a useful near-term price drop."
             : "Mixed: this only points to a modest possible price improvement.",
       goodDirection: "Higher is better. A high score means the predicted future price makes buying conditions more attractive.",
-      history: pointsFrom(profile.prices.map((price) => clamp(50 + ((price - predictedPrice) / price) * 520))),
+      history: pointsFrom(prices.map((price) => clamp(50 + ((price - predictedPrice) / price) * 520))),
     },
     {
       key: "monteCarlo",
@@ -644,7 +653,7 @@ export function analyzeProduct(input: ProductAnalyzeInput): ProductAnalysis {
             ? "Weak: the current price is closer to the recent high."
             : "Fair: the price is in the middle of its recent range.",
       goodDirection: "Higher is better. It means today's price is cheaper relative to recent history.",
-      history: pointsFrom(profile.prices.map((price) => 100 - ((price - minPrice) / Math.max(1, maxPrice - minPrice)) * 100)),
+      history: pointsFrom(prices.map((price) => 100 - ((price - minPrice) / Math.max(1, maxPrice - minPrice)) * 100)),
     },
     {
       key: "movingAverage",
@@ -661,7 +670,7 @@ export function analyzeProduct(input: ProductAnalyzeInput): ProductAnalysis {
             ? "Weak: current price is above the recent average."
             : "Neutral: price is close to its recent average.",
       goodDirection: "Higher is better. It means the current price compares well against the moving average.",
-      history: pointsFrom(profile.prices.map((price) => clamp(55 + ((avgPrice - price) / avgPrice) * 320))),
+      history: pointsFrom(prices.map((price) => clamp(55 + ((avgPrice - price) / avgPrice) * 320))),
     },
     {
       key: "newsSentiment",
@@ -754,7 +763,7 @@ export function analyzeProduct(input: ProductAnalyzeInput): ProductAnalysis {
   const verdict = openByIndex >= 72 ? "Buy now" : openByIndex >= 50 ? "Watch" : "Wait";
   const targetBuyPrice = Math.round(Math.min(currentPrice * 0.98, avgPrice * 0.96, forecast.downsidePrice));
   const confidence = Math.round(clamp(46 + Math.abs(openByIndex - 50) * 0.7 + monteCarloBuyNowSafety * 0.12));
-  const category = profile.category || categoryFallback(productName);
+  const category = input.category ?? profile.category ?? categoryFallback(productName);
   const verdictReasons = buildVerdictReasons({
     verdict,
     currentPrice,
@@ -768,9 +777,10 @@ export function analyzeProduct(input: ProductAnalyzeInput): ProductAnalysis {
     id: productId(productName),
     productName,
     category,
-    imageUrl: profile.imageUrl,
+    imageUrl: input.imageUrl ?? profile.imageUrl,
     fallbackImageUrl: profile.fallbackImageUrl ?? profile.imageUrl,
-    retailerUrl: profile.retailerUrl ?? retailerUrl(productName),
+    retailerUrl: input.retailerUrl ?? profile.retailerUrl ?? retailerUrl(productName),
+    dataSource: input.currentPrice ? "live-price" : findKnownProduct(requestedName) ? "indexed" : "live-search",
     currentPrice,
     targetBuyPrice,
     predictedPrice,

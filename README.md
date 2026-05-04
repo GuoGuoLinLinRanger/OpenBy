@@ -2,7 +2,7 @@
 
 OpenBy is an electronics price-intelligence platform. A user searches one product, such as `Mac Pro`, and OpenBy returns a clear 0-100 OpenBy Index, buy timing verdict, price target, signal breakdown, verdict explanation, and news/demand context.
 
-The active app is intentionally simple for users: the only input is the product name. It currently ships with an indexed electronics catalog, statistical price forecasting, Monte Carlo simulation, news/trend links, and product image fallbacks. Optional external APIs can be added for dynamic image search, backend scoring, database storage, and live market data.
+The active app is intentionally simple for users: the only input is the product name. It ships with an indexed electronics catalog, statistical price forecasting, Monte Carlo simulation, news/trend links, product image fallbacks, optional Supabase caching, optional Google live search, optional PriceAPI price enrichment, and Vercel Analytics.
 
 ## Stack
 
@@ -10,8 +10,8 @@ The active app is intentionally simple for users: the only input is the product 
 - Optional backend: FastAPI, Python
 - Data processing: pandas, NumPy
 - Model layer: statistical price forecast plus Monte Carlo simulation in the active app
-- Storage/cache ready: Supabase code exists in `src/legacy`; the active `src/app` experience is not database-backed yet
-- Optional API layer: Google Programmable Search for dynamic product images, FastAPI for external scoring
+- Storage/cache ready: Supabase-backed `openby_product_reports` cache for active app results
+- Optional API layer: Google Programmable Search for dynamic product search/images, PriceAPI for live prices, FastAPI for external scoring
 
 ## Run The Frontend
 
@@ -37,8 +37,25 @@ For Vercel, add the same values under Project Settings -> Environment Variables.
 Optional variables:
 
 - `GOOGLE_CSE_API_KEY` and `GOOGLE_CSE_CX`: enables runtime product image search. Without these, the app uses verified hardcoded images where available and generated placeholders otherwise.
+- `PRICEAPI_API_KEY`: enables live price enrichment. Without this, the app uses indexed/generative price history.
 - `FASTAPI_URL` or `OPENBY_API_URL`: points `/api/analyze` to a deployed FastAPI backend. Without this, the active app uses the built-in Next.js analysis path.
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`: only needed after wiring the active app to Supabase tables.
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`: enables cached product reports in Supabase.
+
+## Supabase Setup
+
+The active app can run without Supabase, but if you want persistent cached reports:
+
+1. Create a Supabase project.
+2. Run the migrations in `supabase/migrations`.
+3. Add these Vercel environment variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+The active app reads and writes `openby_product_reports`. Public users can read cached reports; writes use the service role key on the server.
 
 ## Deploy On Vercel
 
@@ -106,9 +123,12 @@ Ready now:
 - The active Next.js app builds successfully.
 - Product pages, search, API routes, brand styling, image fallback, and Monte Carlo scoring work without a database.
 - Vercel can host the frontend directly.
+- Vercel Analytics and Speed Insights are installed in the app layout.
+- Supabase, Google CSE, and PriceAPI integrations are wired as optional production services.
 
-Still needed for a full production data product:
+Still needed for a fuller production data product:
 
-- Wire `src/app` to Supabase tables for real product records, price history, cached scores, and analysis history.
-- Add real price/news/trend API credentials and replace static indexed prices with live or scheduled data.
+- Create real Supabase and API accounts, then add their keys in Vercel.
+- Add scheduled jobs if you want prices refreshed in the background instead of only when users request pages.
+- Broaden live provider coverage beyond PriceAPI/Google CSE if you want marketplace-grade product matching.
 - Deploy the FastAPI backend only if you want Python-side scoring instead of the built-in Next.js scoring.
