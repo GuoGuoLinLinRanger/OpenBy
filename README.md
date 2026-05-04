@@ -1,5 +1,5 @@
 # OpenBy
-
+https://project-9j54h-l3lqb1jqn-guoguolinlinrangers-projects.vercel.app/
 OpenBy is an electronics price-intelligence platform. A user searches one product, such as `Mac Pro`, and OpenBy returns a clear 0-100 OpenBy Index, buy timing verdict, price target, signal breakdown, verdict explanation, and news/demand context.
 
 The active app is intentionally simple for users: the only input is the product name. It ships with an indexed electronics catalog, statistical price forecasting, Monte Carlo simulation, news/trend links, product image fallbacks, optional Supabase caching, optional Google live search, optional PriceAPI price enrichment, and Vercel Analytics.
